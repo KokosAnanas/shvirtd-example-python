@@ -1,0 +1,53 @@
+include:
+  - proxy.yaml
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$${MYSQL_ROOT_PASSWORD} || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      backend:
+        ipv4_address: 172.20.0.10
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    container_name: web
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_USER: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+      DB_NAME: ${MYSQL_DATABASE}
+    expose:
+      - "5000"
+    networks:
+      backend:
+        ipv4_address: 172.20.0.5
+    command: >
+      uvicorn main:app
+      --host 0.0.0.0 --port 5000
+      --proxy-headers
+      --forwarded-allow-ips="*"
+
+volumes:
+  db_data:
